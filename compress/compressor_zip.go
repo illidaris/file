@@ -5,8 +5,7 @@ import (
 	"io"
 	"os"
 	"path"
-
-	pathEx "github.com/illidaris/file/path"
+	"strings"
 )
 
 var _ = Compressor(&ZipCompress{})
@@ -33,7 +32,7 @@ func (c *ZipCompress) Compress(output string, files ...*os.File) error {
 	w := zip.NewWriter(compressionFile)
 	defer w.Close()
 	for _, file := range files {
-		err := c.compress(file, w)
+		err := compress(file, "", w)
 		if err != nil {
 			return err
 		}
@@ -44,33 +43,38 @@ func (c *ZipCompress) Compress(output string, files ...*os.File) error {
 // compress
 /**
  * @Description:
- * @receiver c
  * @param file
  * @param zw
  * @return error
  */
-func (c *ZipCompress) compress(file *os.File, zw *zip.Writer) error {
+func compress(file *os.File, prefix string, zw *zip.Writer) error {
 	info, err := file.Stat()
 	if err != nil {
 		return err
 	}
 	if info.IsDir() {
+		if prefix == "" {
+			prefix = info.Name()
+		} else {
+			prefix = prefix + "/" + info.Name()
+		}
 		fileInfos, err := file.Readdir(-1)
 		if err != nil {
 			return err
 		}
 		for _, fi := range fileInfos {
-			f, err := os.Open(path.Join(file.Name(), fi.Name()))
+			f, err := os.Open(file.Name() + "/" + fi.Name())
 			if err != nil {
 				return err
 			}
-			err = c.compress(f, zw)
+			err = compress(f, prefix, zw)
 			if err != nil {
 				return err
 			}
 		}
 	} else {
 		header, err := zip.FileInfoHeader(info)
+		header.Name = prefix + "/" + header.Name
 		if err != nil {
 			return err
 		}
@@ -79,10 +83,10 @@ func (c *ZipCompress) compress(file *os.File, zw *zip.Writer) error {
 			return err
 		}
 		_, err = io.Copy(writer, file)
+		file.Close()
 		if err != nil {
 			return err
 		}
-		defer file.Close()
 	}
 	return nil
 }
@@ -124,18 +128,40 @@ func (c *ZipCompress) unCompress(file *zip.File, output string) error {
 		return err
 	}
 	defer rc.Close()
-	err = pathEx.MkdirIfNotExist(output)
+	filename := path.Join(output, file.Name)
+	err = os.MkdirAll(getDir(filename), 0755)
 	if err != nil {
 		return err
 	}
-	w, err := os.Create(path.Join(output, file.Name)) //nolint:gosec
+	w, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
 	defer w.Close()
-	_, err = io.Copy(w, rc) //nolint:gosec
+	_, err = io.Copy(w, rc)
 	if err != nil {
 		return err
 	}
+	w.Close()
+	rc.Close()
 	return nil
+}
+
+func getDir(path string) string {
+	return subString(path, 0, strings.LastIndex(path, "/"))
+}
+
+func subString(str string, start, end int) string {
+	rs := []rune(str)
+	length := len(rs)
+
+	if start < 0 || start > length {
+		panic("start is wrong")
+	}
+
+	if end < start || end > length {
+		panic("end is wrong")
+	}
+
+	return string(rs[start:end])
 }

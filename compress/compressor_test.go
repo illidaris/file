@@ -34,29 +34,30 @@ func MockTempFiles(exec func(paths ...string)) {
 		}
 	}()
 	tmpPath := path.Join(location, "tmp")
+
 	err := pathEx.MkdirIfNotExist(tmpPath)
 	if err != nil {
 		panic(err)
 	}
 	defer deferFuc(tmpPath)
-	file1 := path.Join(location, "1.txt")
+
+	tmpPath2 := path.Join(tmpPath, "2")
+	err = pathEx.MkdirIfNotExist(tmpPath2)
+	if err != nil {
+		panic(err)
+	}
+	file1 := path.Join(tmpPath2, "1.txt")
 	err = ioutil.WriteFile(file1, []byte("123456A"), fs.ModePerm)
 	if err != nil {
 		panic(err)
 	}
-	defer func(path string) {
-		e := pathEx.Delete(path)
-		if e != nil {
-			fmt.Println(e.Error())
-		}
-	}(file1)
 	file2 := path.Join(tmpPath, "2.txt")
 	err = ioutil.WriteFile(file2, []byte("123456B"), fs.ModePerm)
 	if err != nil {
 		panic(err)
 	}
 	defer deferFuc(file2)
-	exec(tmpPath, file1)
+	exec(tmpPath)
 }
 
 // TestCompress
@@ -92,7 +93,7 @@ func TestZipCompress(t *testing.T) {
 			t.Fatal(err)
 		}
 		beg2 := time.Now()
-		err = compressor.UnCompress(output, "./testTemp/tmp")
+		err = compressor.UnCompress(output, "./testTemp/dec")
 		t.Logf("uncompress cost %dms", time.Since(beg2).Milliseconds())
 		if err != nil {
 			t.Fatal(err)
